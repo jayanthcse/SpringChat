@@ -107,10 +107,16 @@
     </style>
 </head>
 <body>
-<div class="header">Chat & Video Call App</div>
+<div class="header">
+    Chat & Video Call App
+    <div style="float: right; font-size: 0.8rem;">
+        Welcome, <span id="currentUser"></span>
+        <button onclick="logout()" style="margin-left: 10px; padding: 5px 10px; font-size: 0.8rem;">Logout</button>
+    </div>
+</div>
 
 <div>
-    <input type="text" id="sender" placeholder="Your name" />
+    <input type="text" id="sender" placeholder="Your name" readonly />
     <input type="text" id="message" placeholder="Type a message" />
     <button onclick="sendMessage()">Send</button>
     <button onclick="startVideoCall()" class="btn-success">Start Video Call</button>
@@ -162,9 +168,20 @@
     };
 
     function connect() {
-        const socket = new SockJS('/chat'); // Matches your WebSocketConfig endpoint
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/api/auth/login';
+            return;
+        }
+
+        const socket = new SockJS('/chat-websocket');
         stompClient = Stomp.over(socket);
-        stompClient.connect({}, function (frame) {
+
+        const headers = {
+            'Authorization': 'Bearer ' + token
+        };
+
+        stompClient.connect(headers, function (frame) {
             console.log('Connected: ' + frame);
 
             // Subscribe to the topic to receive messages
@@ -174,6 +191,10 @@
             });
         }, function (error) {
             console.error('STOMP error:', error);
+            if (error.headers && error.headers.message === 'Unauthorized') {
+                localStorage.removeItem('token');
+                window.location.href = '/api/auth/login';
+            }
         });
     }
 
@@ -442,8 +463,45 @@
         }
     }
 
+    // Authentication and utility functions
+    function logout() {
+        const token = localStorage.getItem('token');
+        if (token) {
+            fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                }
+            }).finally(() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('username');
+                localStorage.removeItem('userId');
+                window.location.href = '/api/auth/login';
+            });
+        } else {
+            window.location.href = '/api/auth/login';
+        }
+    }
+
+    function initializeUser() {
+        const username = localStorage.getItem('username');
+        const token = localStorage.getItem('token');
+
+        if (!username || !token) {
+            window.location.href = '/api/auth/login';
+            return;
+        }
+
+        document.getElementById('sender').value = username;
+        document.getElementById('currentUser').textContent = username;
+    }
+
     // Connect as soon as page loads
-    window.onload = connect;
+    window.onload = function() {
+        initializeUser();
+        connect();
+    };
 </script>
 </body>
 </html>

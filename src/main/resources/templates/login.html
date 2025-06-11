@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - SpringChat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .header {
+            text-align: center;
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], input[type="password"], input[type="email"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .link {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .link a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .link a:hover {
+            text-decoration: underline;
+        }
+        .error {
+            color: #dc3545;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            color: #155724;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">SpringChat Login</div>
+    
+    <form id="loginForm">
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        
+        <button type="submit">Login</button>
+    </form>
+    
+    <div id="errorMessage" class="error"></div>
+    <div id="successMessage" class="success"></div>
+    
+    <div class="link">
+        <p>Don't have an account? <a href="/api/auth/register">Sign up here</a></p>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            const errorDiv = document.getElementById('errorMessage');
+            const successDiv = document.getElementById('successMessage');
+            
+            // Hide previous messages
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/auth/signin', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Store JWT token
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('username', data.username);
+                    localStorage.setItem('userId', data.id);
+                    
+                    successDiv.textContent = 'Login successful! Redirecting...';
+                    successDiv.style.display = 'block';
+                    
+                    // Redirect to chat page
+                    setTimeout(() => {
+                        window.location.href = '/chat';
+                    }, 1000);
+                } else {
+                    errorDiv.textContent = data.message || 'Login failed. Please try again.';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Network error. Please try again.';
+                errorDiv.style.display = 'block';
+            }
+        });
+        
+        // Check if user is already logged in
+        if (localStorage.getItem('token')) {
+            window.location.href = '/chat';
+        }
+    </script>
+</body>
+</html>
