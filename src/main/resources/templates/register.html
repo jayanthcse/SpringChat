@@ -132,6 +132,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify({
                         username: username,
@@ -139,13 +140,13 @@
                         password: password
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (response.ok) {
                     successDiv.textContent = 'Registration successful! Redirecting to login...';
                     successDiv.style.display = 'block';
-                    
+
                     // Redirect to login page
                     setTimeout(() => {
                         window.location.href = '/api/auth/login';
@@ -155,7 +156,8 @@
                     errorDiv.style.display = 'block';
                 }
             } catch (error) {
-                errorDiv.textContent = 'Network error. Please try again.';
+                console.error('Registration error:', error);
+                errorDiv.textContent = 'Network error. Please check your connection and try again.';
                 errorDiv.style.display = 'block';
             }
         });

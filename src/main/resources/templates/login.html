@@ -126,34 +126,40 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify({
                         username: username,
                         password: password
                     })
                 });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    // Store JWT token
-                    localStorage.setItem('token', data.token);
-                    localStorage.setItem('username', data.username);
-                    localStorage.setItem('userId', data.id);
-                    
-                    successDiv.textContent = 'Login successful! Redirecting...';
-                    successDiv.style.display = 'block';
-                    
-                    // Redirect to chat page
-                    setTimeout(() => {
-                        window.location.href = '/chat';
-                    }, 1000);
-                } else {
-                    errorDiv.textContent = data.message || 'Login failed. Please try again.';
-                    errorDiv.style.display = 'block';
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
+
+                const data = await response.json();
+
+                // Store JWT token
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('username', data.username);
+                localStorage.setItem('userId', data.id);
+
+                successDiv.textContent = 'Login successful! Redirecting...';
+                successDiv.style.display = 'block';
+
+                // Redirect to chat page
+                setTimeout(() => {
+                    window.location.href = '/chat';
+                }, 1000);
+
             } catch (error) {
-                errorDiv.textContent = 'Network error. Please try again.';
+                console.error('Login error:', error);
+                if (error.message.includes('HTTP error')) {
+                    errorDiv.textContent = 'Invalid username or password. Please try again.';
+                } else {
+                    errorDiv.textContent = 'Network error. Please check your connection and try again.';
+                }
                 errorDiv.style.display = 'block';
             }
         });
