@@ -49,12 +49,14 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.disable())
             .csrf(csrf -> csrf.disable())
+            .headers(headers -> headers.frameOptions().disable()) // Allow H2 console frames
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/css/**", "/js/**", "/images/**").permitAll()
                 .requestMatchers("/", "/login", "/register").permitAll()
                 .requestMatchers("/chat-websocket/**").permitAll() // Allow WebSocket connections
+                .requestMatchers("/h2-console/**").permitAll() // Allow H2 console
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())

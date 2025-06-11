@@ -177,11 +177,7 @@
         const socket = new SockJS('/chat-websocket');
         stompClient = Stomp.over(socket);
 
-        const headers = {
-            'Authorization': 'Bearer ' + token
-        };
-
-        stompClient.connect(headers, function (frame) {
+        stompClient.connect({}, function (frame) {
             console.log('Connected: ' + frame);
 
             // Subscribe to the topic to receive messages
@@ -191,10 +187,8 @@
             });
         }, function (error) {
             console.error('STOMP error:', error);
-            if (error.headers && error.headers.message === 'Unauthorized') {
-                localStorage.removeItem('token');
-                window.location.href = '/api/auth/login';
-            }
+            // For now, continue without authentication on WebSocket
+            // In production, implement proper WebSocket authentication
         });
     }
 
@@ -208,6 +202,11 @@
         }
         if (!content) {
             alert("Please enter a message.");
+            return;
+        }
+
+        if (!stompClient || !stompClient.connected) {
+            alert("Not connected to chat server. Please refresh the page.");
             return;
         }
 
@@ -259,6 +258,11 @@
             return;
         }
 
+        if (!stompClient || !stompClient.connected) {
+            alert("Not connected to chat server. Please refresh the page.");
+            return;
+        }
+
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             document.getElementById('localVideo').srcObject = localStream;
@@ -273,7 +277,7 @@
             showChatMessage({ sender: 'System', content: 'Calling other users...' });
         } catch (error) {
             console.error('Error accessing media devices:', error);
-            alert('Could not access camera/microphone. Please check permissions.');
+            alert('Could not access camera/microphone. Please check permissions and ensure you are using HTTPS or localhost.');
         }
     }
 
@@ -496,6 +500,18 @@
         document.getElementById('sender').value = username;
         document.getElementById('currentUser').textContent = username;
     }
+
+    // Add Enter key support for message input
+    document.addEventListener('DOMContentLoaded', function() {
+        const messageInput = document.getElementById('message');
+        if (messageInput) {
+            messageInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        }
+    });
 
     // Connect as soon as page loads
     window.onload = function() {
