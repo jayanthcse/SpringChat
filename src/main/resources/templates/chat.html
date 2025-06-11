@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>Chat</title>
+    <title>Chat & Video Call</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 600px;
+            max-width: 800px;
             margin: 30px auto;
             padding: 20px;
             border: 1px solid #ddd;
@@ -51,15 +51,93 @@
             font-size: 1.5rem;
             font-weight: bold;
         }
+        .video-container {
+            display: none;
+            margin: 20px 0;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 15px;
+            background: #fff;
+        }
+        .video-container.active {
+            display: block;
+        }
+        .video-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        video {
+            width: 100%;
+            height: 200px;
+            background: #000;
+            border-radius: 4px;
+        }
+        .video-controls {
+            text-align: center;
+            margin-top: 10px;
+        }
+        .video-controls button {
+            margin: 0 5px;
+        }
+        .call-notification {
+            display: none;
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .call-notification.show {
+            display: block;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
     </style>
 </head>
 <body>
-<div class="header">Simple Chat App</div>
+<div class="header">Chat & Video Call App</div>
 
 <div>
     <input type="text" id="sender" placeholder="Your name" />
     <input type="text" id="message" placeholder="Type a message" />
     <button onclick="sendMessage()">Send</button>
+    <button onclick="startVideoCall()" class="btn-success">Start Video Call</button>
+</div>
+
+<!-- Call notification -->
+<div id="callNotification" class="call-notification">
+    <span id="callMessage"></span>
+    <button onclick="acceptCall()" class="btn-success">Accept</button>
+    <button onclick="declineCall()" class="btn-danger">Decline</button>
+</div>
+
+<!-- Video container -->
+<div id="videoContainer" class="video-container">
+    <div class="video-grid">
+        <div>
+            <video id="localVideo" autoplay muted></video>
+            <div style="text-align: center; margin-top: 5px;">You</div>
+        </div>
+        <div>
+            <video id="remoteVideo" autoplay></video>
+            <div style="text-align: center; margin-top: 5px;">Remote</div>
+        </div>
+    </div>
+    <div class="video-controls">
+        <button onclick="endCall()" class="btn-danger">End Call</button>
+    </div>
 </div>
 
 <div id="messages"></div>
@@ -70,6 +148,18 @@
 
 <script>
     let stompClient = null;
+    let localStream = null;
+    let remoteStream = null;
+    let peerConnection = null;
+    let isCallActive = false;
+    let currentCaller = null;
+
+    // WebRTC configuration
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' }
+        ]
+    };
 
     function connect() {
         const socket = new SockJS('/chat'); // Matches your WebSocketConfig endpoint
@@ -80,7 +170,7 @@
             // Subscribe to the topic to receive messages
             stompClient.subscribe('/topic/messages', function (messageOutput) {
                 const message = JSON.parse(messageOutput.body);
-                showMessage(message);
+                handleIncomingMessage(message);
             });
         }, function (error) {
             console.error('STOMP error:', error);
@@ -100,7 +190,11 @@
             return;
         }
 
-        const chatMessage = { sender: sender, content: content };
+        const chatMessage = {
+            sender: sender,
+            content: content,
+            type: 'CHAT'
+        };
 
         stompClient.send("/app/sendMessage", {}, JSON.stringify(chatMessage));
 
@@ -108,12 +202,244 @@
         document.getElementById('message').value = '';
     }
 
-    function showMessage(message) {
+    function handleIncomingMessage(message) {
+        if (message.type === 'CHAT') {
+            showChatMessage(message);
+        } else if (message.type === 'VIDEO_CALL_REQUEST') {
+            handleCallRequest(message);
+        } else if (message.type === 'VIDEO_CALL_ACCEPT') {
+            handleCallAccept(message);
+        } else if (message.type === 'VIDEO_CALL_DECLINE') {
+            handleCallDecline(message);
+        } else if (message.type === 'VIDEO_CALL_END') {
+            handleCallEnd(message);
+        } else if (message.type === 'WEBRTC_OFFER') {
+            handleWebRTCOffer(message);
+        } else if (message.type === 'WEBRTC_ANSWER') {
+            handleWebRTCAnswer(message);
+        } else if (message.type === 'WEBRTC_ICE_CANDIDATE') {
+            handleICECandidate(message);
+        }
+    }
+
+    function showChatMessage(message) {
         const messagesArea = document.getElementById('messages');
         const msg = document.createElement('div');
         msg.textContent = message.sender + ": " + message.content;
         messagesArea.appendChild(msg);
         messagesArea.scrollTop = messagesArea.scrollHeight; // scroll to bottom
+    }
+
+    // Video call functions
+    async function startVideoCall() {
+        const sender = document.getElementById('sender').value.trim();
+        if (!sender) {
+            alert("Please enter your name first.");
+            return;
+        }
+
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+
+            const callMessage = {
+                sender: sender,
+                type: 'VIDEO_CALL_REQUEST',
+                content: sender + ' is calling...'
+            };
+
+            stompClient.send("/app/videoCall", {}, JSON.stringify(callMessage));
+            showChatMessage({ sender: 'System', content: 'Calling other users...' });
+        } catch (error) {
+            console.error('Error accessing media devices:', error);
+            alert('Could not access camera/microphone. Please check permissions.');
+        }
+    }
+
+    function handleCallRequest(message) {
+        const sender = document.getElementById('sender').value.trim();
+        if (message.sender === sender) return; // Don't show notification for own call
+
+        currentCaller = message.sender;
+        document.getElementById('callMessage').textContent = message.content;
+        document.getElementById('callNotification').classList.add('show');
+        showChatMessage({ sender: 'System', content: message.sender + ' is calling you!' });
+    }
+
+    async function acceptCall() {
+        const sender = document.getElementById('sender').value.trim();
+        document.getElementById('callNotification').classList.remove('show');
+
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            document.getElementById('videoContainer').classList.add('active');
+
+            const acceptMessage = {
+                sender: sender,
+                type: 'VIDEO_CALL_ACCEPT',
+                targetUser: currentCaller,
+                content: sender + ' accepted the call'
+            };
+
+            stompClient.send("/app/videoCall", {}, JSON.stringify(acceptMessage));
+            isCallActive = true;
+            await createPeerConnection();
+        } catch (error) {
+            console.error('Error accepting call:', error);
+            alert('Could not access camera/microphone.');
+        }
+    }
+
+    function declineCall() {
+        const sender = document.getElementById('sender').value.trim();
+        document.getElementById('callNotification').classList.remove('show');
+
+        const declineMessage = {
+            sender: sender,
+            type: 'VIDEO_CALL_DECLINE',
+            targetUser: currentCaller,
+            content: sender + ' declined the call'
+        };
+
+        stompClient.send("/app/videoCall", {}, JSON.stringify(declineMessage));
+        currentCaller = null;
+    }
+
+    function endCall() {
+        const sender = document.getElementById('sender').value.trim();
+
+        const endMessage = {
+            sender: sender,
+            type: 'VIDEO_CALL_END',
+            content: sender + ' ended the call'
+        };
+
+        stompClient.send("/app/videoCall", {}, JSON.stringify(endMessage));
+        cleanupCall();
+    }
+
+    function handleCallAccept(message) {
+        const sender = document.getElementById('sender').value.trim();
+        if (message.targetUser === sender || message.sender === sender) {
+            document.getElementById('videoContainer').classList.add('active');
+            isCallActive = true;
+            createPeerConnection();
+            showChatMessage({ sender: 'System', content: message.content });
+        }
+    }
+
+    function handleCallDecline(message) {
+        showChatMessage({ sender: 'System', content: message.content });
+        cleanupCall();
+    }
+
+    function handleCallEnd(message) {
+        showChatMessage({ sender: 'System', content: message.content });
+        cleanupCall();
+    }
+
+    function cleanupCall() {
+        isCallActive = false;
+        currentCaller = null;
+        document.getElementById('videoContainer').classList.remove('active');
+        document.getElementById('callNotification').classList.remove('show');
+
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+
+        document.getElementById('localVideo').srcObject = null;
+        document.getElementById('remoteVideo').srcObject = null;
+    }
+
+    // WebRTC functions
+    async function createPeerConnection() {
+        peerConnection = new RTCPeerConnection(rtcConfig);
+
+        // Add local stream to peer connection
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+        }
+
+        // Handle remote stream
+        peerConnection.ontrack = (event) => {
+            remoteStream = event.streams[0];
+            document.getElementById('remoteVideo').srcObject = remoteStream;
+        };
+
+        // Handle ICE candidates
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                const sender = document.getElementById('sender').value.trim();
+                const candidateMessage = {
+                    sender: sender,
+                    type: 'WEBRTC_ICE_CANDIDATE',
+                    data: event.candidate
+                };
+                stompClient.send("/app/videoCall", {}, JSON.stringify(candidateMessage));
+            }
+        };
+
+        // Create offer if we're the caller
+        if (currentCaller === null) { // We are the caller
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            const sender = document.getElementById('sender').value.trim();
+            const offerMessage = {
+                sender: sender,
+                type: 'WEBRTC_OFFER',
+                data: offer
+            };
+            stompClient.send("/app/videoCall", {}, JSON.stringify(offerMessage));
+        }
+    }
+
+    async function handleWebRTCOffer(message) {
+        const sender = document.getElementById('sender').value.trim();
+        if (message.sender === sender) return; // Ignore our own offers
+
+        if (!peerConnection) {
+            await createPeerConnection();
+        }
+
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        const answerMessage = {
+            sender: sender,
+            type: 'WEBRTC_ANSWER',
+            data: answer
+        };
+        stompClient.send("/app/videoCall", {}, JSON.stringify(answerMessage));
+    }
+
+    async function handleWebRTCAnswer(message) {
+        const sender = document.getElementById('sender').value.trim();
+        if (message.sender === sender) return; // Ignore our own answers
+
+        if (peerConnection) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
+        }
+    }
+
+    async function handleICECandidate(message) {
+        const sender = document.getElementById('sender').value.trim();
+        if (message.sender === sender) return; // Ignore our own candidates
+
+        if (peerConnection) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(message.data));
+        }
     }
 
     // Connect as soon as page loads

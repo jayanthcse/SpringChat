@@ -12,6 +12,17 @@ public class ChatController {
     @MessageMapping("/sendMessage")
     @SendTo("/topic/messages")
     public ChatMessage sendMessage(ChatMessage message) {
+        // Set default message type if not specified
+        if (message.getType() == null) {
+            message.setType(ChatMessage.MessageType.CHAT);
+        }
+        return message;
+    }
+
+    @MessageMapping("/videoCall")
+    @SendTo("/topic/messages")
+    public ChatMessage handleVideoCall(ChatMessage message) {
+        // Handle video call signaling messages
         return message;
     }
 
